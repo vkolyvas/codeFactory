@@ -3,40 +3,110 @@ name: feature-factory
 description: Use this skill when the user asks to build, ship, or implement a feature end to end. Runs the full chain of seven subagents with human approval points after the story and the brief, runs the build agents in order (backend, frontend, test-verifier), then validates. Triggers on: "build a feature", "ship a feature", "run the factory", "feature factory", "/feature-factory".
 ---
 
-Process:
+## Mode Selection
 
-1. Invoke the codebase-researcher subagent. Pass the feature idea and the relevant area of code. Wait for findings.
+Before running the chain, determine the execution mode from the user's request:
 
-2. Invoke the story-writer subagent. Pass the feature idea and the researcher's findings. Wait for the user story.
+- **full-feature** (default): researcher → story → spec → backend → frontend → test → validate
+- **hotfix**: researcher → backend → test → validate (skips story and spec)
+- **backend-only**: researcher → story → spec → backend → test → validate (skips frontend)
+- **frontend-only**: researcher → story → spec → frontend → test → validate (skips backend)
+- **docs-only**: researcher → story → docs → validate
 
-3. Show the story to the user. Ask: "Does this match what you want? Reply 'approved' to continue, describe what to change, or reply 'reject' to stop the chain."
-   - If approved, continue.
-   - If changes requested, invoke story-writer again with the user's feedback. Repeat this step until approved or rejected.
-   - If rejected, stop the chain. Summarise what was explored so the user can decide what to do next.
+Ask the user to confirm the mode if ambiguous.
 
-4. Invoke the spec-writer subagent. Pass the approved story and the researcher's findings. Wait for the technical brief.
+## Context SHA Pinning
 
-5. Show the brief to the user. Ask: "Any design red flags? Reply 'approved' to continue, describe what to change, or reply 'reject' to stop the chain."
-   - If approved, continue.
-   - If changes requested, invoke spec-writer again with the user's feedback. Repeat this step until approved or rejected.
-   - If rejected, stop the chain. Keep the approved story so the user can resume later with a different technical approach.
+At chain start, capture the repository state:
 
-6. Invoke the backend-builder subagent. Pass the brief and the researcher's findings. Wait for the backend implementation and its summary.
+```
+git rev-parse HEAD
+```
 
-7. Invoke the frontend-builder subagent. Pass the brief, the researcher's findings, and the backend builder's summary (so it knows the API contract). Wait for the frontend implementation and its summary.
+Record the SHA. Every agent in the chain must validate that `git rev-parse HEAD` still matches before executing. If the SHA changed mid-chain, abort and surface the conflict to the user.
 
-8. Invoke the test-verifier subagent. Pass the approved story, the brief, and both builder summaries. Wait for the acceptance tests and the verifier's report.
+## Artifact Files
 
-9. Invoke the implementation-validator subagent. Pass the approved story, the approved brief, the test verifier's report, and the current implementation. Wait for findings.
+Instead of prose summaries, agents write and read machine-readable artifacts:
 
-10. If the validator reports critical findings, route them to the right build agent (backend-builder or frontend-builder) along with the relevant test from test-verifier. Then re-run test-verifier and the validator.
+| Artifact | Written by | Read by |
+|---|---|---|
+| `/tmp/factory/researcher-findings.md` | codebase-researcher | story-writer, spec-writer, backend-builder, frontend-builder |
+| `/tmp/factory/user-story.md` | story-writer | spec-writer, test-verifier, implementation-validator |
+| `/tmp/factory/technical-brief.md` | spec-writer | backend-builder, frontend-builder, test-verifier |
+| `/tmp/factory/api-contract.yaml` | backend-builder | frontend-builder, test-verifier |
+| `/tmp/factory/backend-summary.md` | backend-builder | frontend-builder, test-verifier |
+| `/tmp/factory/frontend-summary.md` | frontend-builder | test-verifier, implementation-validator |
+| `/tmp/factory/acceptance-test-report.md` | test-verifier | implementation-validator |
 
-11. Show the validator findings to the user. Ask: "Ready to open the PR?"
+Each builder writes its artifact BEFORE the next builder starts. Frontend-builder reads `api-contract.yaml` directly, not prose.
 
-Rules:
-- Never skip the human approval points.
-- Never invoke frontend-builder before backend-builder.
-- Never invoke test-verifier before both builders have finished.
-- Never invoke the validator before the chain has produced some implementation and the verifier has run.
-- Each agent runs in its own subagent context. Pass only the inputs that agent needs.
-- If any agent reports it cannot complete its task, stop and surface the reason to the user.
+## Process (full-feature mode)
+
+1. **git rev-parse HEAD** → record as `context_sha`
+
+2. Invoke **codebase-researcher**. Write findings to `/tmp/factory/researcher-findings.md`.
+
+3. Invoke **story-writer**. Read findings. Write user story to `/tmp/factory/user-story.md`.
+
+4. Show the story to the user. Ask: "Does this match what you want? Reply 'approved' to continue, describe what to change, or 'reject' to stop."
+   - Approved → continue.
+   - Changes requested → re-invoke story-writer with feedback. Repeat until approved or rejected.
+   - Rejected → stop. Summarise what was explored.
+
+5. Validate `context_sha` still matches. If not, abort.
+
+6. Invoke **spec-writer**. Read story + findings. Write brief to `/tmp/factory/technical-brief.md`.
+
+7. Show the brief to the user. Ask: "Any design red flags? Reply 'approved' to continue, describe what to change, or 'reject' to stop."
+   - Approved → continue.
+   - Changes requested → re-invoke spec-writer with feedback. Repeat until approved or rejected.
+   - Rejected → stop. Keep the approved story.
+
+8. Validate `context_sha` still matches. If not, abort.
+
+9. Invoke **backend-builder**. Read brief + findings. Write implementation. Write `api-contract.yaml` and `backend-summary.md`. Wait for completion. Validate `context_sha` before editing.
+
+10. Invoke **frontend-builder**. Read `api-contract.yaml` (NOT prose summary), brief, findings. Write implementation. Write `frontend-summary.md`. Wait for completion.
+
+11. Validate `context_sha` still matches. If not, abort and surface conflict.
+
+12. Invoke **test-verifier**. Read story, brief, `api-contract.yaml`, both summaries. Write acceptance tests. Write `acceptance-test-report.md`.
+
+13. Invoke **implementation-validator**. Read all artifacts. Report findings grouped by severity.
+
+14. If critical findings → route to appropriate builder → re-run test-verifier → re-run validator.
+
+15. Show findings to user. Ask: "Ready to open the PR?"
+
+## Routing Rules by Mode
+
+**hotfix** (no story, no spec):
+- Steps 2, 9, 12, 13, 15
+- Backend-builder reads researcher findings directly
+- No brief approval gate
+
+**backend-only** (no frontend):
+- Steps 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 15
+- Skip step 10
+
+**frontend-only** (no backend):
+- Steps 2, 3, 4, 5, 6, 7, 8, 10, 12, 13, 15
+- Skip step 9
+- frontend-builder reads researcher findings for context only
+- API contract must already exist from prior backend run (confirm before starting)
+
+**docs-only**:
+- Steps 2, 3, 4, 13, 15
+- Skip implementation entirely
+- Validator reviews researcher findings and story only
+
+## Chain Integrity Rules
+
+- Never skip the human approval points (story, brief).
+- Validate `context_sha` before any builder edits files.
+- Each builder writes its artifact before the next builder starts.
+- Frontend-builder MUST read `api-contract.yaml`, not prose summaries.
+- Test-verifier MUST read `api-contract.yaml`, not assumptions.
+- If SHA drifts mid-chain: abort, surface conflict, let user decide whether to continue or restart.
+- If any agent reports it cannot complete its task: stop and surface the reason.
