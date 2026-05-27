@@ -1,0 +1,54 @@
+{
+  "overrides": [
+    {
+      "files": ["src/api/**", "app/api/**"],
+      "rules": {
+        "no-restricted-paths": [
+          "error",
+          {
+            " Patterns": [
+              "**/db/**",
+              "**/prisma/**",
+              "**/repositories/**",
+              "**/models/**"
+            ],
+            "exceptPatterns": [
+              "**/schemas/**"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/components/**", "src/ui/**", "app/components/**"],
+      "rules": {
+        "no-restricted-paths": [
+          "error",
+          {
+            "Patterns": [
+              "**/db/**",
+              "**/prisma/**",
+              "**/services/**",
+              "**/workers/**",
+              "**/jobs/**"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/services/**", "services/**"],
+      "rules": {
+        "no-restricted-paths": [
+          "warn",
+          {
+            "Patterns": [
+              "**/api/**",
+              "**/routes/**"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

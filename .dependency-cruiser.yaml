@@ -1,0 +1,94 @@
+# Dependency cruiser configuration for codeFactory
+# Run: npx depcruise src --config .dependency-cruiser.yaml --validate
+
+reporterType: json
+prefix: "$(pwd)/"
+
+rules:
+  ## Forbidden: API layer may not reach database directly
+  - name: no-api-to-db
+    severity: error
+    from:
+      pathSegments:
+        - api
+        - routes
+    to:
+      pathSegments:
+        - db
+        - prisma
+
+  ## Forbidden: Components may not reach database
+  - name: no-components-to-db
+    severity: error
+    from:
+      pathSegments:
+        - components
+        - ui
+    to:
+      pathSegments:
+        - db
+        - prisma
+
+  ## Forbidden: Services may not be imported by API routes (use use-cases)
+  - name: no-api-to-service
+    severity: warn
+    from:
+      pathSegments:
+        - api
+    to:
+      pathSegments:
+        - services
+    exclude:
+      - "**/use-cases/**"
+
+  ## Forbidden: No direct database access outside repositories
+  - name: no-direct-prisma
+    severity: error
+    from:
+      pathSegments:
+        - services
+        - workers
+        - jobs
+    to:
+      pathSegments:
+        - prisma
+    exclude:
+      - "**/repositories/**"
+
+  ## Forbidden: No circular dependencies
+  - name: no-circular
+    severity: error
+    from:
+      pathSegments:
+        - "**"
+    to:
+      pathSegments:
+        - "**"
+    circular: true
+
+  ## Discouraged: Shared utilities depending on domain logic
+  - name: no-shared-domain-coupling
+    severity: warn
+    from:
+      pathSegments:
+        - shared
+        - utils
+        - lib
+    to:
+      pathSegments:
+        - domain
+        - services
+        - use-cases
+
+  ## Required: use-cases are the only entry point from API
+  - name: api-must-use-use-cases
+    severity: error
+    from:
+      pathSegments:
+        - api
+        - routes
+    to:
+      pathSegments:
+        - services
+    exclude:
+      - "**/use-cases/**"
