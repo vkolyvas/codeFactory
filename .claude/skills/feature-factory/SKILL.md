@@ -1,19 +1,32 @@
 ---
 name: feature-factory
-description: Use this skill when the user asks to build, ship, or implement a feature end to end. Runs the full chain of seven subagents with human approval points after the story and the brief, runs the build agents in order (backend, frontend, test-verifier), then validates. Triggers on: "build a feature", "ship a feature", "run the factory", "feature factory", "/feature-factory".
+description: Use this skill when the user asks to build, ship, or implement a feature end to end. Runs the full chain with parallel reviewer fan-out after builds, then validation. Triggers on: "build a feature", "ship a feature", "run the factory", "feature factory", "/feature-factory".
 ---
 
 ## Mode Selection
 
-Before running the chain, determine the execution mode from the user's request:
+Before running the chain, determine the execution mode:
 
-- **full-feature** (default): researcher → story → spec → backend → frontend → test → validate
-- **hotfix**: researcher → backend → test → validate (skips story and spec)
-- **backend-only**: researcher → story → spec → backend → test → validate (skips frontend)
-- **frontend-only**: researcher → story → spec → frontend → test → validate (skips backend)
+- **full-feature** (default): researcher → story → spec → backend → [security | migration? | docs] → frontend → test → validate
+- **hotfix**: researcher → backend → [security | migration?] → test → validate (skips story and spec)
+- **backend-only**: researcher → story → spec → backend → [security | migration?] → test → validate (skips frontend)
+- **frontend-only**: researcher → story → spec → frontend → test → validate (API contract must pre-exist)
 - **docs-only**: researcher → story → docs → validate
 
 Ask the user to confirm the mode if ambiguous.
+
+## Lane Model
+
+Agents belong to one of four lanes:
+
+| Lane | Agents | May Edit | Blocking |
+|------|--------|----------|----------|
+| A — Builders | backend-builder, frontend-builder | Yes (source) | Yes |
+| B — Reviewers | security-reviewer, migration-reviewer | No | Yes |
+| C — Verifiers | test-verifier, implementation-validator | No (tests only) | Yes |
+| D — Docs | docs-writer | Yes (docs only) | No (non-blocking) |
+
+Only add an agent when: (1) the task repeats often, (2) deterministic automation is insufficient, (3) output materially changes merge quality.
 
 ## Run-Scoped Artifact Root
 
@@ -24,9 +37,7 @@ context_sha=$(git rev-parse HEAD)
 artifact_root=$(mktemp -d "/tmp/factory/${context_sha}-XXXXXX")
 ```
 
-`mktemp -d` guarantees a unique, non-colliding directory even if two runs start within the same second.
-
-All artifacts for this run live under `$artifact_root/`.
+All artifacts live under `$artifact_root/`.
 
 ## Manifest File
 
@@ -45,117 +56,121 @@ artifacts:
   technical-brief: pending
   api-contract: pending
   backend-summary: pending
+  security-findings: pending
+  migration-findings: not_applicable
+  docs-report: not_applicable
   frontend-summary: pending
   acceptance-test-report: pending
 
 phase: initialized
 ```
 
-After each phase completes, update `manifest.yaml`:
-- Set the corresponding `artifacts` entry to `present`
-- Update `phase` to the current phase name
+After each phase: update `manifest.yaml` artifacts entry and `phase` field.
 
-If the chain crashes, the manifest shows exactly where execution stopped. Resume by reading the manifest and restarting from the incomplete phase.
+On crash: read manifest → find incomplete phase → resume from there.
 
 ## Artifact File Map
 
 | Artifact | Written by | Read by |
 |---|---|---|
-| `$artifact_root/researcher-findings.md` | codebase-researcher | story-writer, spec-writer, backend-builder, frontend-builder |
-| `$artifact_root/user-story.md` | story-writer | spec-writer, test-verifier, implementation-validator |
-| `$artifact_root/technical-brief.md` | spec-writer | backend-builder, frontend-builder, test-verifier |
+| `$artifact_root/researcher-findings.md` | codebase-researcher | story-writer, spec-writer, builders |
+| `$artifact_root/user-story.md` | story-writer | spec-writer, test-verifier, validator |
+| `$artifact_root/technical-brief.md` | spec-writer | builders, reviewers, verifier |
 | `$artifact_root/api-contract.yaml` | backend-builder | frontend-builder, test-verifier |
-| `$artifact_root/backend-summary.md` | backend-builder | frontend-builder, test-verifier |
-| `$artifact_root/frontend-summary.md` | frontend-builder | test-verifier, implementation-validator |
-| `$artifact_root/acceptance-test-report.md` | test-verifier | implementation-validator |
-| `$artifact_root/manifest.yaml` | orchestrator | orchestrator, resume logic |
-
-Each builder writes its artifact BEFORE the next builder starts. Frontend-builder reads `api-contract.yaml` directly, not prose.
+| `$artifact_root/backend-summary.md` | backend-builder | reviewers, frontend-builder |
+| `$artifact_root/security-findings.md` | security-reviewer | validator |
+| `$artifact_root/migration-findings.md` | migration-reviewer | validator |
+| `$artifact_root/docs-report.md` | docs-writer | validator |
+| `$artifact_root/frontend-summary.md` | frontend-builder | verifier |
+| `$artifact_root/acceptance-test-report.md` | test-verifier | validator |
+| `$artifact_root/manifest.yaml` | orchestrator | orchestrator, resume |
 
 ## Context SHA Pinning
 
-`context_sha` is captured at chain start. Every agent validates `git rev-parse HEAD` matches before executing. If SHA changed mid-chain: abort, surface conflict, let user decide to continue or restart.
+`context_sha` captured at chain start. Every agent validates `git rev-parse HEAD` before executing. If SHA drifts: abort, surface conflict, let user decide.
 
 ## Contract Validation Gate
 
-After backend-builder writes `api-contract.yaml` and before frontend-builder starts:
+After backend-builder writes `api-contract.yaml` and before fan-out:
 
 1. Run yamllint on `$artifact_root/api-contract.yaml` if available; skip if not installed.
-2. If yamllint fails: abort chain, surface error, do not start frontend-builder.
-3. frontend-builder reads `api-contract.yaml` and validates `schema_version` and `context_sha` fields match the chain's values. If mismatch: abort.
+2. If yamllint fails: abort, do not start reviewers or frontend-builder.
+3. frontend-builder validates `schema_version` and `context_sha` before consuming.
 
 ## Contract Change Reconciliation
 
-If backend-builder is re-run after validator feedback, the `api-contract.yaml` is regenerated with a new `generated_at` timestamp.
-
-- Invalidate any in-progress frontend work.
-- Re-run frontend-builder from scratch against the updated contract.
-- Do not allow frontend-builder to continue with a stale contract.
-- Update `manifest.yaml` `phase` and `artifacts` entries accordingly.
+If backend-builder re-runs after validator feedback:
+1. Regenerate `api-contract.yaml` with new `generated_at`.
+2. Invalidate all downstream work (frontend, reviewers).
+3. Re-run the full fan-out from step 11.
 
 ## Process (full-feature mode)
 
-1. Capture `context_sha`. Create `artifact_root` via `mktemp -d`. Write `manifest.yaml`.
+1. Capture `context_sha`. Create `artifact_root`. Write `manifest.yaml`.
 
-2. Invoke **codebase-researcher**. Write findings to `$artifact_root/researcher-findings.md`. Update `manifest.yaml`: `researcher-findings: present`, `phase: researcher`.
+2. Invoke **codebase-researcher**. Write `$artifact_root/researcher-findings.md`. Update manifest.
 
-3. Invoke **story-writer**. Read findings. Write story to `$artifact_root/user-story.md`. Update manifest.
+3. Invoke **story-writer**. Read findings. Write `$artifact_root/user-story.md`. Update manifest.
 
-4. Show the story to the user. Ask: "Does this match what you want? Reply 'approved' to continue, describe what to change, or 'reject' to stop."
+4. Show story to user. Ask: approved / changes / reject.
    - Approved → continue.
-   - Changes requested → re-invoke story-writer. Repeat until approved or rejected.
-   - Rejected → stop. Summarise what was explored. Do NOT cleanup — user may want to inspect artifacts before exiting.
+   - Changes → re-invoke story-writer. Repeat.
+   - Rejected → stop. Do NOT cleanup. User may inspect artifacts.
 
 5. Validate `context_sha`. If drift → abort.
 
-6. Invoke **spec-writer**. Read story + findings. Write brief to `$artifact_root/technical-brief.md`. Update manifest.
+6. Invoke **spec-writer**. Write `$artifact_root/technical-brief.md`. Update manifest.
 
-7. Show the brief to the user. Ask: "Any design red flags? Reply 'approved' to continue, describe what to change, or 'reject' to stop."
+7. Show brief to user. Ask: approved / changes / reject.
    - Approved → continue.
-   - Changes requested → re-invoke spec-writer. Repeat until approved or rejected.
+   - Changes → re-invoke spec-writer. Repeat.
    - Rejected → stop. Keep approved story. Do NOT cleanup.
 
 8. Validate `context_sha`. If drift → abort.
 
-9. Invoke **backend-builder**. Read brief + findings from `$artifact_root/`. Validate SHA. Write implementation. Write `$artifact_root/api-contract.yaml` (with `schema_version`, `context_sha`, `generated_at`) and `$artifact_root/backend-summary.md`. Update manifest. Wait. Validate SHA before any edit.
+9. Invoke **backend-builder**. Validate SHA. Write implementation. Write `$artifact_root/api-contract.yaml` and `$artifact_root/backend-summary.md`. Update manifest. Wait.
 
-10. **Contract gate**: Run yamllint on `$artifact_root/api-contract.yaml` if available. Fail on error. frontend-builder then reads it, validates `schema_version` and `context_sha`.
+10. **Contract gate**: yamllint on `api-contract.yaml`. Fail on error.
 
-11. Invoke **frontend-builder**. Read `$artifact_root/api-contract.yaml` (mandatory), brief, findings. Validate contract metadata. Write implementation. Write `$artifact_root/frontend-summary.md`. Update manifest. Wait.
+11. **Fan-out (parallel)** — all three run simultaneously:
+    - Invoke **security-reviewer**. Read brief + implementation. Write `$artifact_root/security-findings.md`. Update manifest: `security-findings: present`.
+    - Invoke **migration-reviewer** — ONLY if brief or changed files include `prisma/`, `migrations/`, or `schema.prisma`. If not applicable: write `migration-findings: not_applicable` to manifest and skip. If applicable: write findings to `$artifact_root/migration-findings.md`. Update manifest.
+    - Invoke **docs-writer** — non-blocking. Read summaries. Write `$artifact_root/docs-report.md`. If nothing to document: write `docs-report: nothing_to_document` to manifest. Update manifest. **Do not block chain on docs.**
+    Wait for all three to complete.
 
-12. Validate `context_sha`. If drift → abort and surface conflict.
+12. Invoke **frontend-builder**. Read `api-contract.yaml` (mandatory, not optional). Validate `schema_version` + `context_sha`. Write `$artifact_root/frontend-summary.md`. Update manifest. Wait.
 
-13. Invoke **test-verifier**. Read story, brief, `api-contract.yaml`, both summaries. Write acceptance tests. Write `$artifact_root/acceptance-test-report.md`. Update manifest.
+13. Validate `context_sha`. If drift → abort and surface conflict.
 
-14. Invoke **implementation-validator**. Read all artifacts. Report findings grouped by severity.
+14. Invoke **test-verifier**. Read story, brief, `api-contract.yaml`, both summaries. Write `$artifact_root/acceptance-test-report.md`. Update manifest.
 
-15. If critical findings → route to appropriate builder. If backend-builder re-runs: regenerate `api-contract.yaml`, then re-run frontend-builder from scratch (step 11), then re-run test-verifier (step 13), then re-run validator (step 14). Update manifest at each step.
+15. Invoke **implementation-validator**. Read all artifacts. Report findings grouped by severity, including security and migration findings.
 
-16. Show findings to user. Ask: "Ready to open the PR?"
+16. If critical findings → route to appropriate builder. Re-run that builder → re-run fan-out (step 11) → re-run test-verifier → re-run validator.
 
-17. **On user approval or rejection exit**: Cleanup. `rm -rf "$artifact_root"`. Do NOT cleanup before user has approved or exited — user may want to inspect artifacts.
+17. Show all findings to user. Ask: "Ready to open the PR?"
 
-18. (If user requests specific artifact inspection before approving: serve it from `$artifact_root` before cleanup runs.)
+18. **On user approval or rejection exit**: `rm -rf "$artifact_root"`. Do NOT cleanup before user approves or exits.
 
 ## Routing Rules by Mode
 
-**hotfix**: Steps 2, 9, 13, 14, 16, 17. Backend-builder reads researcher findings directly. No story/spec gates.
+**hotfix**: Steps 2, 9, 11 (fan-out), 14, 15, 17, 18. No story/spec gates. migration-reviewer conditional.
 
-**backend-only**: Steps 2–8, 9, 13, 14, 16, 17. Skip step 10 (no frontend).
+**backend-only**: Steps 2–8, 9, 11, 14, 15, 17, 18. Skip frontend-builder (step 12). Fan-out still runs security + migration + docs.
 
-**frontend-only**: Steps 2–8, 11, 13, 14, 16, 17. Skip step 9. API contract must already exist from prior backend run. Validate contract exists and is valid before starting.
+**frontend-only**: Steps 2–8, 12, 14, 15, 17, 18. Skip backend-builder (step 9). API contract must already exist and be valid. migration-reviewer skipped (no backend changes).
 
-**docs-only**: Steps 2, 3, 4, 14, 16, 17. No implementation. Validator reviews findings and story only.
+**docs-only**: Steps 2, 3, 4, 17, 18. No implementation. Validator reviews researcher findings and story only.
 
 ## Chain Integrity Rules
 
-- Never skip the human approval points (story, brief).
+- Never skip human approval points (story, brief).
 - Validate `context_sha` before any builder edits files.
-- Run yamllint on `api-contract.yaml` before frontend-builder starts.
-- frontend-builder validates `schema_version` and `context_sha` in the contract before consuming.
-- If backend-builder re-runs, frontend-builder must restart from scratch.
-- Keep artifacts on disk until user approves or exits — never cleanup before approval.
-- If SHA drifts mid-chain: abort, surface conflict.
-- If any agent reports it cannot complete its task: stop and surface the reason.
-- Update `manifest.yaml` after each phase completes.
-- On crash resume: read manifest to find last completed phase and restart from there.
+- Run yamllint before fan-out.
+- migration-reviewer only runs when migration files are in scope — always update manifest.
+- docs-writer is non-blocking — never halt the chain on incomplete docs.
+- Fan-out agents run in parallel — do not serialize them.
+- If backend re-runs: full fan-out restart, not partial.
+- Keep artifacts until user approves or exits.
+- Update `manifest.yaml` after every phase.
+- On crash: read manifest, restart from incomplete phase.
