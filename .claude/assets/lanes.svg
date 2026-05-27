@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 240" fill="none" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <rect width="900" height="240" rx="16" fill="#0a0a0f"/>
+
+  <!-- Title -->
+  <text x="450" y="28" font-family="monospace" font-size="14" fill="#8888aa" text-anchor="middle" letter-spacing="3">4-LANE MODEL</text>
+
+  <!-- Lane A — Builders -->
+  <rect x="20" y="42" width="200" height="188" rx="10" fill="#4ade80" opacity="0.07" stroke="#4ade80" stroke-width="2"/>
+  <text x="120" y="60" font-family="monospace" font-size="11" fill="#4ade80" text-anchor="middle" letter-spacing="1">Lane A — Builders</text>
+  <text x="120" y="75" font-family="monospace" font-size="8" fill="#4ade8060" text-anchor="middle">may edit source</text>
+  <line x1="40" y1="84" x2="200" y2="84" stroke="#4ade8040" stroke-width="1"/>
+
+  <rect x="30" y="92" width="82" height="28" rx="6" fill="#4ade80" opacity="0.2"/>
+  <text x="71" y="109" font-family="monospace" font-size="10" fill="#4ade80" text-anchor="middle">backend-builder</text>
+
+  <rect x="120" y="92" width="82" height="28" rx="6" fill="#60a5fa" opacity="0.2"/>
+  <text x="161" y="109" font-family="monospace" font-size="10" fill="#60a5fa" text-anchor="middle">frontend-builder</text>
+
+  <rect x="30" y="128" width="172" height="22" rx="4" fill="#1e1c2e" stroke="#3d3a5c" stroke-width="1"/>
+  <text x="116" y="143" font-family="monospace" font-size="9" fill="#8888aa" text-anchor="middle">edit services, routes,</text>
+  <text x="116" y="156" font-family="monospace" font-size="9" fill="#8888aa" text-anchor="middle">components, tests</text>
+
+  <text x="120" y="180" font-family="monospace" font-size="8" fill="#4ade8060" text-anchor="middle">Blocking</text>
+  <text x="120" y="193" font-family="monospace" font-size="8" fill="#4ade8060" text-anchor="middle">P16 pattern reuse</text>
+  <text x="120" y="206" font-family="monospace" font-size="8" fill="#4ade8060" text-anchor="middle">SHA validation</text>
+  <text x="120" y="219" font-family="monospace" font-size="8" fill="#4ade8060" text-anchor="middle">escape hatches</text>
+
+  <!-- Lane B — Reviewers -->
+  <rect x="234" y="42" width="200" height="188" rx="10" fill="#f87171" opacity="0.07" stroke="#f87171" stroke-width="2"/>
+  <text x="334" y="60" font-family="monospace" font-size="11" fill="#f87171" text-anchor="middle" letter-spacing="1">Lane B — Reviewers</text>
+  <text x="334" y="75" font-family="monospace" font-size="8" fill="#f8717160" text-anchor="middle">read-only, no edits</text>
+  <line x1="254" y1="84" x2="414" y2="84" stroke="#f8717140" stroke-width="1"/>
+
+  <rect x="244" y="92" width="82" height="28" rx="6" fill="#f87171" opacity="0.2"/>
+  <text x="285" y="109" font-family="monospace" font-size="10" fill="#f87171" text-anchor="middle">security-reviewer</text>
+
+  <rect x="334" y="92" width="82" height="28" rx="6" fill="#818cf8" opacity="0.2"/>
+  <text x="375" y="109" font-family="monospace" font-size="10" fill="#818cf8" text-anchor="middle">architecture-reviewer</text>
+
+  <rect x="244" y="128" width="82" height="28" rx="6" fill="#fb923c" opacity="0.2"/>
+  <text x="285" y="145" font-family="monospace" font-size="10" fill="#fb923c" text-anchor="middle">migration-reviewer</text>
+
+  <rect x="334" y="128" width="82" height="28" rx="6" fill="#8888aa" opacity="0.2"/>
+  <text x="375" y="145" font-family="monospace" font-size="10" fill="#8888aa" text-anchor="middle">docs-writer (D)</text>
+
+  <rect x="244" y="162" width="172" height="22" rx="4" fill="#1e1c2e" stroke="#3d3a5c" stroke-width="1"/>
+  <text x="330" y="177" font-family="monospace" font-size="9" fill="#8888aa" text-anchor="middle">check security, arch,</text>
+  <text x="330" y="190" font-family="monospace" font-size="9" fill="#8888aa" text-anchor="middle">migrations, docs</text>
+
+  <text x="334" y="214" font-family="monospace" font-size="8" fill="#f8717160" text-anchor="middle">Blocking</text>
+  <text x="334" y="227" font-family="monospace" font-size="8" fill="#f8717160" text-anchor="middle">Critical → merge blocked</text>
+
+  <!-- Lane C — Verifiers -->
+  <rect x="448" y="42" width="200" height="188" rx="10" fill="#fbbf24" opacity="0.07" stroke="#fbbf24" stroke-width="2"/>
+  <text x="548" y="60" font-family="monospace" font-size="11" fill="#fbbf24" text-anchor="middle" letter-spacing="1">Lane C — Verifiers</text>
+  <text x="548" y="75" font-family="monospace" font-size="8" fill="#fbbf2460" text-anchor="middle">tests only, no source edits</text>
+  <line x1="468" y1="84" x2="628" y2="84" stroke="#fbbf2440" stroke-width="1"/>
+
+  <rect x="458" y="92" width="82" height="28" rx="6" fill="#fbbf24" opacity="0.2"/>
+  <text x="499" y="109" font-family="monospace" font-size="10" fill="#fbbf24" text-anchor="middle">test-verifier</text>
+
+  <rect x="548" y="92" width="82" height="28" rx="6" fill="#f97316" opacity="0.2"/>
+  <text x="589" y="109" font-family="monospace" font-size="10" fill="#f97316" text-anchor="middle">impl-validator</text>
+
+  <rect x="458" y="128" width="172" height="22" rx="4" fill="#1e1c2e" stroke="#3d3a5c" stroke-width="1"/>
+  <text x="544" y="143" font-family="monospace" font-size="9" fill="#8888aa" text-anchor="middle">accept tests, severity</text>
+  <text x="544" y="156" font-family="monospace" font-size="9" fill="#8888aa" text-anchor="middle">grouped findings</text>
+
+  <text x="548" y="214" font-family="monospace" font-size="8" fill="#fbbf2460" text-anchor="middle">Blocking</text>
+  <text x="548" y="227" font-family="monospace" font-size="8" fill="#fbbf2460" text-anchor="middle">Critical → route to builder</text>
+
+  <!-- Lane D — Docs -->
+  <rect x="662" y="42" width="200" height="188" rx="10" fill="#8888aa" opacity="0.07" stroke="#8888aa" stroke-width="2"/>
+  <text x="762" y="60" font-family="monospace" font-size="11" fill="#8888aa" text-anchor="middle" letter-spacing="1">Lane D — Docs</text>
+  <text x="762" y="75" font-family="monospace" font-size="8" fill="#8888aa60" text-anchor="middle">docs only, non-blocking</text>
+  <line x1="682" y1="84" x2="842" y2="84" stroke="#8888aa40" stroke-width="1"/>
+
+  <rect x="672" y="92" width="174" height="28" rx="6" fill="#8888aa" opacity="0.2"/>
+  <text x="759" y="109" font-family="monospace" font-size="10" fill="#8888aa" text-anchor="middle">docs-writer</text>
+
+  <rect x="672" y="128" width="174" height="22" rx="4" fill="#1e1c2e" stroke="#3d3a5c" stroke-width="1"/>
+  <text x="759" y="143" font-family="monospace" font-size="9" fill="#8888aa" text-anchor="middle">CHANGELOG, docs/,</text>
+  <text x="759" y="156" font-family="monospace" font-size="9" fill="#8888aa" text-anchor="middle">README updates</text>
+
+  <text x="762" y="214" font-family="monospace" font-size="8" fill="#8888aa60" text-anchor="middle">Non-blocking</text>
+  <text x="762" y="227" font-family="monospace" font-size="8" fill="#8888aa60" text-anchor="middle">Never halts the chain</text>
+
+  <!-- Cross-lane arrows (dashed) -->
+  <line x1="220" y1="106" x2="234" y2="106" stroke="#ffffff30" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="434" y1="106" x2="448" y2="106" stroke="#ffffff30" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="648" y1="106" x2="662" y2="106" stroke="#ffffff30" stroke-width="1" stroke-dasharray="3 3"/>
+</svg>
