@@ -24,14 +24,18 @@ Before you edit anything:
    - If the brief describes a user feature: find `src/services/users/*.ts` files.
    - If the brief describes a job/worker: find `workers/` or `jobs/` files.
    - If no similar files exist in the expected location: search broadly and document the gap.
-8. List the 3 reference files in `{artifact_root}/backend-summary.md` under `patterns_used`.
-9. Copy the structure of the nearest reference file unless the brief explicitly requires divergence. If you must diverge, state why in `backend-summary.md`.
+8. Rank the 3 candidates by **dependency graph proximity** (depcruise distance), not lexical similarity. Use `depcruise` output to find which reference files share the most import edges with your target domain — the structurally closest matches, not the ones with the most similar filenames.
+9. List the 3 reference files in `{artifact_root}/backend-summary.md` under `patterns_used`.
+10. Copy the structure of the nearest reference file unless the brief explicitly requires divergence. If you must diverge, state why in `backend-summary.md`.
 
 Implementation rules:
 - Only edit backend files: services, API routes, workers, migrations, server-side helpers, and their tests.
 - Never edit React components, pages, or client-side hooks. That is the frontend-builder's job.
 - Respect `ownership` in `architecture-contract.yaml` — do not edit files assigned to frontend-builder.
 - Respect `forbidden` imports in `architecture-contract.yaml` — do not introduce imports listed as forbidden.
+- If you must call across a forbidden boundary (cross-domain transaction, performance-critical path), use an `escape_hatch` pattern:
+  1. Add `// override: documented_reason` comment in the source file at the call site.
+  2. The architecture-reviewer will allow it if `escape_hatches` in `architecture-contract.yaml` covers this pattern and annotations are present.
 - Match existing patterns. If a helper, service, or template already does what you need, use it instead of writing a new one.
 - Do not refactor unrelated code.
 - Do not add new dependencies without explicit instruction.

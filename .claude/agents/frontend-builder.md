@@ -27,7 +27,7 @@ Before you edit anything:
 9. Load the build-with-tests skill for conventions.
 
 **P16 enforcement — mandatory before editing:**
-10. Find the 3 nearest existing implementations of the component type you are building. Use `grep` and `glob` to locate them.
+10. Find the 3 nearest existing implementations of the component type you are building. Use `grep` and `glob` to locate them, then rank by **dependency graph proximity** (depcruise distance), not lexical similarity.
     - If the brief describes a data table: find existing table components.
     - If the brief describes a form: find existing form components.
     - If the brief describes a dashboard tile: find existing dashboard components.

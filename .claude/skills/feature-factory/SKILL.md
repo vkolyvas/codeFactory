@@ -73,23 +73,24 @@ On crash: read manifest → find incomplete phase → resume from there.
 
 ## Architecture Contract (P13)
 
-At chain start, before invoking any agent, generate `$artifact_root/architecture-contract.yaml` by inspecting the codebase structure:
+At chain start, before invoking any agent, generate the run-scoped **`declared`** architecture contract at `$artifact_root/architecture-contract.yaml`:
 
-1. Run `find . -type f -name "*.ts" -o -name "*.tsx" | head -100` to understand directory layout.
-2. Identify the layer structure from existing directories (e.g., api/, services/, repositories/, components/, db/, workers/).
-3. Read existing dependency patterns by grepping imports in 2-3 representative files per layer.
-4. Generate `architecture-contract.yaml` with:
-   - `layers`: each layer and what it may import
-   - `forbidden`: explicit import paths that must never occur
-   - `ownership`: which directories belong to which builder
-   - `patterns`: reference file pairs for each domain/service (used by builders for pattern reuse)
+> **Important:** This file declares the INTENDED architecture — what boundaries SHOULD exist — not what currently exists in the codebase. It is not derived by inspecting code. Enterprise codebases have accumulated chaos; you must not encode that as truth. The spec-writer owns this artifact.
 
-Example output structure:
+**Generation method:**
+1. Read `CLAUDE.md` for explicit architectural rules (layers, ownership, don't-do list).
+2. If the codebase has existing architecture (e.g., an established `docs/adr/` with ADRs, or existing layer structure), read those and treat them as declared ground truth.
+3. If no existing declared architecture exists, infer ONLY the physical directory structure as a starting point — then annotate each layer with its intended semantic role based on directory name semantics.
+4. Always write explicit `declared_at: "{ISO8601}"` field — distinguishes from generated/observed contracts.
+
+**Output structure:**
 
 ```yaml
 schema_version: 1
 context_sha: "{context_sha}"
-generated_at: "{ISO8601 timestamp}"
+generated_at: "{ISO8601}"          # This is the DECLARED contract generation time
+kind: declared                      # distinguishing label
+declared_at: "{ISO8601}"            # when this was authored
 
 layers:
   api:
@@ -124,22 +125,20 @@ ownership:
   "app/components/**":
     lane: frontend-builder
 
-patterns:
-  order_service:
-    domain: orders
-    reference_files:
-      - src/services/orders/create-order.ts
-      - src/services/orders/update-order.ts
-  user_service:
-    domain: users
-    reference_files:
-      - src/services/users/create-user.ts
+escape_hatches:                     # new: controlled cross-boundary allowlist
+  - pattern: "shared/**"            # shared utilities may reach domain
+    allowed_calls:
+      - cross_domain_transaction
+      - performance_critical_path
+    requires:
+      - documented_reason           # inline code comment
+      - override_annotation         # special comment in source file
 
 dependency_tool: depcruise
 dependency_config: .dependency-cruiser.yaml
 ```
 
-Store this as `$artifact_root/architecture-contract.yaml`.
+The declaration is written once at chain start. The **observed** architecture is generated separately by the architecture-reviewer during fan-out (not written to this file — it goes to `observed-dependencies.json` in the artifact root so the two can be diffed).
 
 ## Artifact File Map
 
@@ -193,7 +192,7 @@ If backend-builder re-runs after validator feedback:
 
 1. Capture `context_sha`. Create `artifact_root`. Write `manifest.yaml`.
 
-2. Generate `$artifact_root/architecture-contract.yaml` by inspecting codebase layout, import patterns, and directory ownership. Update manifest.
+2. Generate `$artifact_root/architecture-contract.yaml` — the **declared** architecture contract. This is INTENTION, not observation. Do not derive from inspecting existing code — that encodes legacy chaos. Read CLAUDE.md for explicit rules; treat existing ADRs or established structure as ground truth. Write `kind: declared` + `declared_at` timestamp. Update manifest.
 
 3. Invoke **codebase-researcher**. Write `$artifact_root/researcher-findings.md`. Update manifest.
 
